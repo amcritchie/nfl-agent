@@ -13,9 +13,9 @@ def _norm_url(path: str) -> str:
     return f"{NFL_API_BASE}{path}"
 
 @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=0.5, min=0.5, max=2))
-def _get(url: str):
+def _post(url: str):
     with httpx.Client(timeout=10.0) as client:
-        r = client.get(url)
+        r = client.post(url)
         r.raise_for_status()
         return r.json()
 
@@ -37,6 +37,6 @@ def fetch_nfl_data(kind: str, **params):
 
     if url in _cache:
         return {"source_url": url, "data": _cache[url]}
-    data = _get(url)
+    data = _post(url)
     _cache[url] = data
     return {"source_url": url, "data": data}

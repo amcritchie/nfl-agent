@@ -22,16 +22,39 @@ def ask(body: AskIn):
         {"role":"system","content": SYSTEM_PROMPT},
         {"role":"user","content": body.question}
     ]
+    
+    # First, get the tool call decision from the LLM
     decision = call_llm(messages, tools_schema=True)
+    print(f"Message - {messages}")  # Add this line
+    print(f"DEBUG - Initial call_llm result: {decision}")  # Add this line
     sources = []
+    
     if "tool_call" in decision:
         tc = decision["tool_call"]
         if tc["name"] != "fetch_nfl_data":
             raise HTTPException(status_code=400, detail="Unknown tool requested")
+        
+        # Fetch the data
         tool_result = fetch_nfl_data(**tc["arguments"])
         sources.append(tool_result["source_url"])
-        # MVP reply; swap to real LLM later for synthesis
-        answer = f"I fetched data from {tool_result['source_url']}. What detail do you want (starters, positions, strengths)?"
+        
+        # Now synthesize a human-readable answer using the LLM
+        synthesis_messages = [
+            {"role":"system","content": SYSTEM_PROMPT},
+            {"role":"user","content": body.question},
+            {"role":"assistant","content": f"I'll fetch the data for you."},
+            {"role":"tool","name": "fetch_nfl_data", "content": json.dumps(tool_result)},
+            {"role":"user","content": "Based on this data, please answer the original question in a clear, human-readable way. Include specific details from the data and cite the sources."}
+        ]
+        
+        synthesis_result = call_llm(synthesis_messages, tools_schema=False)
+        
+        if "content" in synthesis_result:
+            answer = synthesis_result["content"]
+        else:
+            # Fallback if synthesis fails
+            answer = f"I fetched data from {tool_result['source_url']}. What specific detail would you like to know about?"
     else:
         answer = "Ask me about a team or matchup for Week 1."
+    
     return {"answer": answer, "sources": sources}
